@@ -433,6 +433,24 @@ function updateTypewriterHighlights() {
                     v.currentSpans.push(nextSpan);
                 }
             });
+
+            // 브라우저 전체 스크롤을 막고 디스플레이 내부 컨테이너만 스크롤하도록 변경
+            if (v === activeVoices[0] && v.currentSpans.length > 0) {
+                const displayContainer = document.getElementById('typewriterDisplay');
+                const targetSpan = v.currentSpans[0];
+                
+                const containerRect = displayContainer.getBoundingClientRect();
+                const targetRect = targetSpan.getBoundingClientRect();
+                
+                const scrollLeftTo = displayContainer.scrollLeft + (targetRect.left - containerRect.left) - (containerRect.width / 2) + (targetRect.width / 2);
+                const scrollTopTo = displayContainer.scrollTop + (targetRect.top - containerRect.top) - (containerRect.height / 2) + (targetRect.height / 2);
+                
+                displayContainer.scrollTo({
+                    left: scrollLeftTo,
+                    top: scrollTopTo,
+                    behavior: 'smooth'
+                });
+            }
         }
     });
 }
@@ -512,18 +530,7 @@ function startPlayback(targetVoices) {
     
     isPlaying = true;
 
-    const playbackArea = document.getElementById('playbackControlArea');
-    const keyboardArea = document.getElementById('virtualKeyboard');
-    const stickyHeader = document.querySelector('.sticky');
-    
-    if (playbackArea && keyboardArea) {
-        const headerOffset = stickyHeader ? stickyHeader.offsetHeight + 16 : 100;
-        const topPos = playbackArea.getBoundingClientRect().top + window.pageYOffset;
-        const bottomPos = keyboardArea.getBoundingClientRect().bottom + window.pageYOffset;
-        
-        const viewTop = window.pageYOffset + headerOffset;
-        const viewBottom = window.pageYOffset + window.innerHeight;
-    }
+
     
     const globalStopBtn = document.getElementById('globalStopBtn');
     globalStopBtn.classList.remove('pointer-events-none', 'opacity-50', 'cursor-not-allowed', 'hover:bg-slate-700', 'bg-slate-800', 'text-slate-500');

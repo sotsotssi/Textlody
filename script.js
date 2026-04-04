@@ -36,7 +36,7 @@ const i18n = {
         toastMax: "최대 2개까지만 추가할 수 있습니다.",
         toastNoText: "재생할 텍스트가 없습니다.",
         textTitle: "텍스트",
-        indivPlay: "▶ 재생",
+        indivPlay: "▶ 개별 재생",
         voicePlaceholder: "연주할 텍스트를 입력하세요...",
         synthLabel: "음색:",
         synthOpt_musicbox: "오르골",
@@ -88,7 +88,7 @@ const i18n = {
         toastMax: "最大2個まで追加できます。",
         toastNoText: "再生するテキストがありません。",
         textTitle: "テキスト",
-        indivPlay: "▶ 再生",
+        indivPlay: "▶ 個別再生",
         voicePlaceholder: "演奏するテキストを入力してください...",
         synthLabel: "音色:",
         synthOpt_musicbox: "オルゴール",
@@ -129,8 +129,8 @@ function updateLanguage(lang) {
     // 보이스 트랙 내부 텍스트 교체 (동적 생성 요소 대응)
     document.querySelectorAll('.voice-title').forEach(el => { el.textContent = texts.textTitle; });
     document.querySelectorAll('.char-count').forEach(el => {
-        const textarea = el.previousElementSibling;
-        el.textContent = `${textarea.value.length} / 140 ${texts.charUnit}`;
+        const textarea = el.parentElement.querySelector('.voice-text');
+        if(textarea) el.textContent = `${textarea.value.length} / 140 ${texts.charUnit}`;
     });
     updateAddButtonState();
 
@@ -147,6 +147,12 @@ function updateLanguage(lang) {
         document.getElementById('kb-ko').classList.add('hidden');
         document.getElementById('kb-ja').classList.remove('hidden');
     }
+
+    // 언어가 변경될 때마다 해당 언어의 키 매핑 및 음계 재생성
+    const scaleSelect = document.getElementById('scaleSelect');
+    if (scaleSelect) {
+        applyScale(scaleSelect.value);
+    }
 }
 
 document.getElementById('langSelect').addEventListener('change', (e) => {
@@ -161,14 +167,14 @@ function showToast(message) {
     toastText.textContent = message;
     toast.classList.remove('translate-y-20', 'opacity-0');
     clearTimeout(toastTimeout);
-    toastTimeout = setTimeout(() => { toast.classList.add('translate-y-20', 'opacity-0'); }, 3000);
+    toastTimeout = setTimeout(() => {
+        toast.classList.add('translate-y-20', 'opacity-0');
+    }, 3000);
 }
 
 const CHO = ["ㄱ","ㄲ","ㄴ","ㄷ","ㄸ","ㄹ","ㅁ","ㅂ","ㅃ","ㅅ","ㅆ","ㅇ","ㅈ","ㅉ","ㅊ","ㅋ","ㅌ","ㅍ","ㅎ"];
 const JUNG = ["ㅏ","ㅐ","ㅑ","ㅒ","ㅓ","ㅔ","ㅕ","ㅖ","ㅗ","ㅘ","ㅙ","ㅚ","ㅛ","ㅜ","ㅝ","ㅞ","ㅟ","ㅠ","ㅡ","ㅢ","ㅣ"];
 const JONG = ["","ㄱ","ㄲ","ㄳ","ㄴ","ㄵ","ㄶ","ㄷ","ㄹ","ㄺ","ㄻ","ㄼ","ㄽ","ㄾ","ㄿ","ㅀ","ㅁ","ㅂ","ㅄ","ㅅ","ㅆ","ㅇ","ㅈ","ㅊ","ㅋ","ㅌ","ㅍ","ㅎ"];
-
-const qwertyOrder = ['1','2','3','4','5','6','7','8','9','0','minus','caret','yen','q','w','e','r','t','y','u','i','o','p','at','bracketleft','a','s','d','f','g','h','j','k','l','semicolon','colon','bracketright','z','x','c','v','b','n','m','comma','period','slash','backslash'];
 
 const charToKey = {
     'q':'q', 'ㅂ':'q', 'ㅃ':'q', 'w':'w', 'ㅈ':'w', 'ㅉ':'w', 'e':'e', 'ㄷ':'e', 'ㄸ':'e',
@@ -197,11 +203,19 @@ const charToKey = {
     'わ':'0', 'ワ':'0', 'を':'0', 'ヲ':'0', 'ん':'y', 'ン':'y', '゛':'at', '゜':'bracketleft'
 };
 
+// 언어에 따라 다른 자판 배열 사용
+const qwertyOrderKO = "qwertyuiopasdfghjklzxcvbnm".split('');
+const qwertyOrderJA = ['1','2','3','4','5','6','7','8','9','0','minus','caret','yen','q','w','e','r','t','y','u','i','o','p','at','bracketleft','a','s','d','f','g','h','j','k','l','semicolon','colon','bracketright','z','x','c','v','b','n','m','comma','period','slash','backslash'];
+let activeQwertyOrder = qwertyOrderKO;
+
 function getMappedKey(c) {
     if (!c) return null;
     if (charToKey[c]) return charToKey[c];
     const code = c.charCodeAt(0);
-    if (code >= 0x4E00 && code <= 0x9FFF) return qwertyOrder[code % 48];
+    // 한자일 경우 현재 활성화된 키보드 길이에 맞춰 매핑
+    if (code >= 0x4E00 && code <= 0x9FFF) {
+        return activeQwertyOrder[code % activeQwertyOrder.length];
+    }
     return null;
 }
 
@@ -226,7 +240,10 @@ function decomposeText(text, ignoreSymbols = false, simultaneous = false, engWor
                 sequence.push([...engBuffer]);
                 mapping.push([...engMapBuffer]);
             } else {
-                engBuffer.forEach((char, idx) => { sequence.push([char]); mapping.push(engMapBuffer[idx]); });
+                engBuffer.forEach((char, idx) => {
+                    sequence.push([char]);
+                    mapping.push(engMapBuffer[idx]);
+                });
             }
             engBuffer = []; engMapBuffer = [];
         }
@@ -234,9 +251,12 @@ function decomposeText(text, ignoreSymbols = false, simultaneous = false, engWor
 
     for (let i = 0; i < text.length; i++) {
         const char = text[i];
+        
+        // 허용된 문자가 아닌 공백/기호 무시 처리
         if (ignoreSymbols && !(/[a-zA-Z0-9가-힣ㄱ-ㅎㅏ-ㅣぁ-んァ-ン一-龥]/.test(char))) {
             flushEngBuffer(); continue;
         }
+
         if (/[a-zA-Z]/.test(char)) {
             engBuffer.push(char.toLowerCase()); engMapBuffer.push(i); continue;
         } else { flushEngBuffer(); }
@@ -284,20 +304,38 @@ let delayNode = null;
 let feedbackGain = null;
 
 const scaleIntervals = {
-    'major_pentatonic': [0, 2, 4, 7, 9], 
-    'minor_pentatonic': [0, 3, 5, 7, 10], 
-    'major': [0, 2, 4, 5, 7, 9, 11],
+    'major_pentatonic': [0, 2, 4, 7, 9], 'minor_pentatonic': [0, 3, 5, 7, 10], 'major': [0, 2, 4, 5, 7, 9, 11],
     'minor': [0, 2, 3, 5, 7, 8, 10]
 };
 
-function generateScale(intervals, startMidiNote, count) {
+// 한국어 버전 (무료 원본) 상향식 음계 생성 함수 (26노트)
+function generateScaleKO(intervals, startMidiNote, count) {
+    const freqs = [];
+    let intervalIdx = 0;
+    let octaveOffset = 0;
+    for (let i = 0; i < count; i++) {
+        const noteInOctave = intervals[intervalIdx];
+        const midiNote = startMidiNote + octaveOffset * 12 + noteInOctave;
+        const freq = 440 * Math.pow(2, (midiNote - 69) / 12);
+        freqs.push(freq);
+        
+        intervalIdx++;
+        if (intervalIdx >= intervals.length) {
+            intervalIdx = 0;
+            octaveOffset++;
+        }
+    }
+    return freqs;
+}
+
+// 일본어 버전 (플러스판 기반) 하향식 핑퐁 음계 생성 함수 (48노트)
+function generateScaleJA(intervals, startMidiNote, count) {
     const freqs = [];
     let currentNote = startMidiNote;
     let generatedCount = 0;
     let direction = -1;
     const MIN_NOTE = 36;
     const MAX_NOTE = 96;
-    
     while (generatedCount < count) {
         let pitchClass = ((currentNote % 12) + 12) % 12;
         if (intervals.includes(pitchClass)) {
@@ -306,11 +344,9 @@ function generateScale(intervals, startMidiNote, count) {
         }
         currentNote += direction;
         if (currentNote < MIN_NOTE) {
-            direction = 1;
-            currentNote += 2;
+            direction = 1; currentNote += 2;
         } else if (currentNote > MAX_NOTE) {
-            direction = -1;
-            currentNote -= 2;
+            direction = -1; currentNote -= 2;
         }
     }
     return freqs;
@@ -320,16 +356,29 @@ let defaultNotes = {};
 
 function applyScale(scaleName) {
     const intervals = scaleIntervals[scaleName] || scaleIntervals['major_pentatonic'];
-    const freqs = generateScale(intervals, 96, 48);
     defaultNotes = {};
-    qwertyOrder.forEach((key, index) => { defaultNotes[key] = freqs[index]; });
+    
+    // 현재 선택된 언어에 따라 다른 음계 생성 로직 및 키 배열 사용
+    if (currentLang === 'ko') {
+        activeQwertyOrder = qwertyOrderKO;
+        const freqs = generateScaleKO(intervals, 48, 26);
+        activeQwertyOrder.forEach((key, index) => {
+            defaultNotes[key] = freqs[index];
+        });
+    } else {
+        activeQwertyOrder = qwertyOrderJA;
+        const freqs = generateScaleJA(intervals, 96, 48);
+        activeQwertyOrder.forEach((key, index) => {
+            defaultNotes[key] = freqs[index];
+        });
+    }
 }
-applyScale('major_pentatonic');
 
 function initAudio() {
     if (!audioCtx) {
         audioCtx = new (window.AudioContext || window.webkitAudioContext)();
-        masterGain = audioCtx.createGain(); 
+        masterGain = audioCtx.createGain();
+        masterGain.gain.value = 0.8;
         echoSend = audioCtx.createGain(); echoSend.gain.value = 1; 
         delayNode = audioCtx.createDelay(); delayNode.delayTime.value = 0.35;
         feedbackGain = audioCtx.createGain(); feedbackGain.gain.value = 0.4;
@@ -341,9 +390,14 @@ function initAudio() {
 }
 
 function getDynamicDelay(baseDelay, index, totalLength, mode) {
-    if (mode === 'swing') return (index % 2 === 0) ? baseDelay * 1.33 : baseDelay * 0.67;
-    else if (mode === 'waltz') return index % 3 === 0 ? baseDelay * 1.2 : baseDelay * 0.9;
-    else if (mode === 'random') return baseDelay * (0.7 + Math.random() * 0.6);
+    if (mode === 'swing') {
+        return (index % 2 === 0) ? baseDelay * 1.33 : baseDelay * 0.67;
+    } else if (mode === 'waltz') {
+        const pos = index % 3;
+        return pos === 0 ? baseDelay * 1.2 : baseDelay * 0.9;
+    } else if (mode === 'random') {
+        return baseDelay * (0.7 + Math.random() * 0.6);
+    }
     return baseDelay;
 }
 
@@ -390,7 +444,6 @@ function createVoiceCard() {
     
     const txtArea = card.querySelector('.voice-text');
     const charCount = card.querySelector('.char-count');
-    
     txtArea.addEventListener('input', (e) => {
         stopPlayback();
         charCount.textContent = `${e.target.value.length} / 140 ${i18n[currentLang].charUnit}`;
@@ -436,7 +489,8 @@ function highlightKey(keyChar) {
 
 function playVoiceTones(voice, frequencies, currentDelaySec, accentMultiplier = 1.0) {
     if (!audioCtx || !frequencies || frequencies.length === 0) return;
-    const noteLength = voice.useSustain ? voice.noteLength : Math.min(0.15, currentDelaySec * 0.85);
+    const defaultNoteLength = Math.min(0.15, currentDelaySec * 0.85);
+    const noteLength = voice.useSustain ? voice.noteLength : defaultNoteLength;
     const t = audioCtx.currentTime, synthType = voice.synthType, prevGainKey = `${voice.id}-${synthType}`;
 
     if ((synthType === 'basic' || synthType === '8bit') && previousSynthGains[prevGainKey]) {
@@ -457,14 +511,6 @@ function playVoiceTones(voice, frequencies, currentDelaySec, accentMultiplier = 
                 const osc = audioCtx.createOscillator(); osc.type = 'square'; osc.frequency.setValueAtTime(f, t);
                 const localGain = audioCtx.createGain(); localGain.gain.setValueAtTime(0, t); localGain.gain.setValueAtTime(0.1, t + 0.01); localGain.gain.setValueAtTime(0.1, t + noteLength * 0.8); localGain.gain.linearRampToValueAtTime(0, t + noteLength);
                 osc.connect(localGain); localGain.connect(noteMasterGain); osc.start(t); osc.stop(t + noteLength + 0.05);
-            } else if (synthType === 'piano') {
-                const osc1 = audioCtx.createOscillator(), osc2 = audioCtx.createOscillator(); osc1.type = 'sine'; osc1.frequency.setValueAtTime(f, t); osc2.type = 'triangle'; osc2.frequency.setValueAtTime(f, t);
-                const localGain = audioCtx.createGain(); localGain.gain.setValueAtTime(0, t); localGain.gain.linearRampToValueAtTime(0.5, t + 0.01); localGain.gain.exponentialRampToValueAtTime(0.001, t + noteLength);
-                osc1.connect(localGain); osc2.connect(localGain); localGain.connect(noteMasterGain); osc1.start(t); osc2.start(t); osc1.stop(t + noteLength + 0.05);
-            } else if (synthType === 'string') {
-                const osc = audioCtx.createOscillator(), filter = audioCtx.createBiquadFilter(); osc.type = 'sawtooth'; osc.frequency.setValueAtTime(f, t); filter.type = 'lowpass'; filter.frequency.setValueAtTime(3000, t); filter.frequency.exponentialRampToValueAtTime(100, t + noteLength);
-                const localGain = audioCtx.createGain(); localGain.gain.setValueAtTime(0, t); localGain.gain.linearRampToValueAtTime(0.4, t + 0.03); localGain.gain.exponentialRampToValueAtTime(0.001, t + noteLength);
-                osc.connect(filter); filter.connect(localGain); localGain.connect(noteMasterGain); osc.start(t); osc.stop(t + noteLength + 0.05);
             } else {
                 const osc = audioCtx.createOscillator(); osc.type = 'sine'; osc.frequency.setValueAtTime(f, t);
                 const localGain = audioCtx.createGain(); localGain.gain.setValueAtTime(0, t); localGain.gain.linearRampToValueAtTime(0.2, t + 0.02); localGain.gain.exponentialRampToValueAtTime(0.001, t + noteLength);
@@ -497,7 +543,9 @@ function updateTypewriterHighlights() {
             if (v === activeVoices[0] && v.currentSpans.length > 0) {
                 const displayContainer = document.getElementById('typewriterDisplay'), targetSpan = v.currentSpans[0];
                 const containerRect = displayContainer.getBoundingClientRect(), targetRect = targetSpan.getBoundingClientRect();
-                displayContainer.scrollTo({ left: displayContainer.scrollLeft + (targetRect.left - containerRect.left) - (containerRect.width / 2) + (targetRect.width / 2), top: displayContainer.scrollTop + (targetRect.top - containerRect.top) - (containerRect.height / 2) + (targetRect.height / 2), behavior: 'smooth' });
+                const scrollLeftTo = displayContainer.scrollLeft + (targetRect.left - containerRect.left) - (containerRect.width / 2) + (targetRect.width / 2);
+                const scrollTopTo = displayContainer.scrollTop + (targetRect.top - containerRect.top) - (containerRect.height / 2) + (targetRect.height / 2);
+                displayContainer.scrollTo({ left: scrollLeftTo, top: scrollTopTo, behavior: 'smooth' });
             }
         }
     });
@@ -520,7 +568,7 @@ function playLoop() {
                 const defaultFreqs = [];
                 validChars.forEach(c => {
                     const mappedKey = getMappedKey(c);
-                    if (mappedKey) {
+                    if (mappedKey && defaultNotes[mappedKey] !== undefined) {
                         highlightKey(mappedKey);
                         defaultFreqs.push(defaultNotes[mappedKey]);
                     }
@@ -563,11 +611,12 @@ function stopPlayback() {
 
 // --- 초기화 이벤트 리스너 ---
 window.addEventListener('DOMContentLoaded', () => {
-    updateLanguage('ko'); // 초기 언어 세팅
-    createVoiceCard(); // 기본 카드 1개 생성
+    updateLanguage('ko'); // 초기 언어 세팅 (applyScale 자동 호출됨)
+    createVoiceCard(); 
 
     document.getElementById('scaleSelect').addEventListener('change', (e) => {
-        stopPlayback(); applyScale(e.target.value);
+        applyScale(e.target.value);
+        stopPlayback(); 
     });
 
     document.getElementById('speedControl').addEventListener('input', (e) => document.getElementById('speedValue').textContent = `${e.target.value} cps`);
